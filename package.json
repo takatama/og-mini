@@ -1,0 +1,26 @@
+{
+  "name": "og-mini",
+  "version": "1.0.0",
+  "description": "",
+  "main": "functions/index.js",
+  "scripts": {
+    "start": "functions-framework --target=og --port=8080",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/takatama/og-mini.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/takatama/og-mini/issues"
+  },
+  "homepage": "https://github.com/takatama/og-mini#readme",
+  "dependencies": {
+    "@google-cloud/functions-framework": "^4.0.0",
+    "cheerio": "^1.1.2"
+  }
+}
