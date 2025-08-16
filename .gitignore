@@ -23,6 +23,9 @@ lib-cov
 .env.local
 .env.production
 
+# API Keys database (contains sensitive API keys)
+api-keys.json
+
 # Old deployment configuration (replaced by .env)
 deploy.config.json
 

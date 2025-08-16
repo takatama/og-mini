@@ -174,20 +174,30 @@ function validateApiKey(req) {
 
   if (!validApiKeys) {
     // Skip Authentication if API_KEYS is not set
-    return true;
+    return { valid: true, keyName: null };
   }
 
   if (!apiKey) {
-    return false;
+    return { valid: false, keyName: null };
   }
 
   const validKeys = validApiKeys.split(",").map((key) => key.trim());
-  return validKeys.includes(apiKey);
+  const isValid = validKeys.includes(apiKey);
+
+  if (isValid) {
+    // Log API key usage for Cloud Logging analysis
+    // This allows tracking usage without persistent file storage
+    const maskedKey = apiKey.substring(0, 8) + "...";
+    console.log(`API_KEY_USAGE: ${maskedKey} - ${new Date().toISOString()}`);
+  }
+
+  return { valid: isValid, keyName: null };
 }
 
 exports.og = async (req, res) => {
   // API Key validation
-  if (!validateApiKey(req)) {
+  const authResult = validateApiKey(req);
+  if (!authResult.valid) {
     return res.status(401).json({
       error: "unauthorized",
       message:
