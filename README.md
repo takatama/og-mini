@@ -11,6 +11,8 @@
 - ✅ Simple deployment with `npm run deploy`
 - ✅ Configurable project ID and region
 - ✅ CORS enabled for browser requests
+- ✅ Optional API key authentication for access control
+- ✅ Usage analytics via Cloud Logging integration
 
 ---
 
@@ -40,6 +42,9 @@ FUNCTION_NAME=og-mini
 RUNTIME=nodejs20
 MEMORY=256MB
 TIMEOUT=8s
+
+# Optional: API Keys for authentication (managed by npm scripts)
+API_KEYS=
 ```
 
 ### 3. Deploy
@@ -72,13 +77,17 @@ npm start
 
 ## NPM Scripts
 
-| Script                      | Description                      | Usage                  |
-| --------------------------- | -------------------------------- | ---------------------- |
-| `npm start`                 | Start local development server   | Test functions locally |
-| `npm run deploy`            | Deploy to Google Cloud Functions | One-command deployment |
-| `npm run logs`              | View recent function logs        | Debug and monitor      |
-| `npm run logs:stream`       | Stream logs in real-time         | Live monitoring        |
-| `npm run logs -- --limit=N` | View specific number of logs     | Custom log count       |
+| Script                          | Description                      | Usage                  |
+| ------------------------------- | -------------------------------- | ---------------------- |
+| `npm start`                     | Start local development server   | Test functions locally |
+| `npm run deploy`                | Deploy to Google Cloud Functions | One-command deployment |
+| `npm run logs`                  | View recent function logs        | Debug and monitor      |
+| `npm run logs:stream`           | Stream logs in real-time         | Live monitoring        |
+| `npm run logs -- --limit=N`     | View specific number of logs     | Custom log count       |
+| `npm run api-key:add <name>`    | Add a new API key                | API key management     |
+| `npm run api-key:list`          | List all API keys                | View existing keys     |
+| `npm run api-key:remove <name>` | Remove an API key                | Delete unused keys     |
+| `npm run api-key:update-env`    | Update .env with current keys    | Sync configuration     |
 
 ---
 
@@ -411,3 +420,179 @@ If you see mojibake (garbled Japanese text):
 - The encoding detection should handle this automatically
 - Check that the source website has proper charset declaration
 - Verify the response in your browser to ensure the API is working correctly
+
+---
+
+## API Key Authentication
+
+og-mini supports optional API key authentication to protect your deployed function from unauthorized usage.
+
+### Managing API Keys
+
+```bash
+# Add a new API key
+npm run api-key:add myapp
+
+# Add a custom API key
+npm run api-key:add frontend my-custom-secret-key
+
+# List all API keys
+npm run api-key:list
+
+# Remove an API key
+npm run api-key:remove myapp
+
+# Update .env file with current keys
+npm run api-key:update-env
+```
+
+### Configuration
+
+API keys are stored in `api-keys.json` (automatically ignored by git) and automatically synchronized to your `.env` file as `API_KEYS`.
+
+Example `.env` configuration:
+
+```bash
+# Other configuration...
+API_KEYS=abc123...,def456...,custom-key-here
+```
+
+### Usage with API Keys
+
+When API keys are configured, requests must include a valid key:
+
+```bash
+# Using X-API-Key header (recommended)
+curl -H "X-API-Key: your-api-key" \
+  "https://your-region-your-project.cloudfunctions.net/og?url=https://example.com"
+
+# Using query parameter
+curl "https://your-region-your-project.cloudfunctions.net/og?url=https://example.com&key=your-api-key"
+```
+
+### Error Response
+
+Requests without valid API keys receive a 401 response:
+
+```json
+{
+  "error": "unauthorized",
+  "message": "Valid API key required in X-API-Key header or 'key' query parameter"
+}
+```
+
+### Disabling Authentication
+
+To disable API key authentication, leave `API_KEYS` empty or remove it from your `.env` file:
+
+```bash
+API_KEYS=
+```
+
+---
+
+## Usage Analytics with Cloud Logging
+
+Since Google Cloud Functions are stateless, usage statistics are logged to Cloud Logging for later analysis rather than stored in files.
+
+### Log Format
+
+Each API key usage generates a log entry in this format:
+
+```
+API_KEY_USAGE: abc12345... - 2025-08-16T07:15:30.123Z
+```
+
+Where:
+
+- `abc12345...` is the first 8 characters of the API key (masked for security)
+- The timestamp shows when the request was made
+
+### Analyzing Usage with gcloud
+
+#### View Recent API Key Usage
+
+```bash
+# View all API key usage logs
+gcloud logging read "textPayload:API_KEY_USAGE" \
+  --project=your-project-id \
+  --format="table(timestamp,textPayload)" \
+  --limit=100
+
+# View usage for a specific key pattern
+gcloud logging read "textPayload:API_KEY_USAGE AND textPayload:abc12345" \
+  --project=your-project-id \
+  --format="table(timestamp,textPayload)"
+```
+
+#### Count Usage by Time Period
+
+```bash
+# Count API key usages in the last 24 hours
+gcloud logging read "textPayload:API_KEY_USAGE AND timestamp>=\"$(date -u -d '1 day ago' '+%Y-%m-%dT%H:%M:%SZ')\"" \
+  --project=your-project-id \
+  --format="value(textPayload)" | wc -l
+
+# Count usages in the last hour
+gcloud logging read "textPayload:API_KEY_USAGE AND timestamp>=\"$(date -u -d '1 hour ago' '+%Y-%m-%dT%H:%M:%SZ')\"" \
+  --project=your-project-id \
+  --format="value(textPayload)" | wc -l
+```
+
+### Analyzing Usage with Cloud Console
+
+1. Go to [Cloud Logging](https://console.cloud.google.com/logs) in the Google Cloud Console
+2. Use this query to filter API key usage logs:
+   ```
+   textPayload:"API_KEY_USAGE"
+   ```
+3. Add time filters and additional criteria as needed
+4. Use the "Export" feature to export logs to BigQuery for advanced analysis
+
+### Advanced Analytics with BigQuery
+
+For comprehensive usage analytics, export logs to BigQuery:
+
+1. **Create a Log Sink** to export API usage logs to BigQuery:
+
+   ```bash
+   # Create a BigQuery dataset
+   bq mk --dataset your-project-id:og_mini_analytics
+
+   # Create a log sink
+   gcloud logging sinks create og-mini-usage-sink \
+     bigquery.googleapis.com/projects/your-project-id/datasets/og_mini_analytics \
+     --log-filter="textPayload:API_KEY_USAGE"
+   ```
+
+2. **Query Usage Statistics** in BigQuery:
+
+   ```sql
+   -- Daily usage counts
+   SELECT
+     DATE(timestamp) as date,
+     COUNT(*) as requests
+   FROM `your-project-id.og_mini_analytics.your_log_table`
+   WHERE textPayload LIKE '%API_KEY_USAGE%'
+   GROUP BY date
+   ORDER BY date DESC;
+
+   -- Usage by API key (masked)
+   SELECT
+     REGEXP_EXTRACT(textPayload, r'API_KEY_USAGE: ([^.]+)\.\.\.') as api_key_prefix,
+     COUNT(*) as usage_count
+   FROM `your-project-id.og_mini_analytics.your_log_table`
+   WHERE textPayload LIKE '%API_KEY_USAGE%'
+   GROUP BY api_key_prefix
+   ORDER BY usage_count DESC;
+   ```
+
+### Rate Limiting (Optional)
+
+For production deployments, consider implementing rate limiting using Google Cloud Armor or API Gateway:
+
+- **Cloud Armor**: Configure rate limiting rules based on IP address
+- **API Gateway**: Set up quotas and rate limits per API key
+- **Cloud Endpoints**: Advanced API management with detailed analytics
+
+---

@@ -8,6 +8,10 @@
     "deploy": "node scripts/deploy.js",
     "logs": "node scripts/logs.js",
     "logs:stream": "node scripts/logs.js --stream",
+    "api-key:add": "node scripts/api-keys.js add",
+    "api-key:list": "node scripts/api-keys.js list",
+    "api-key:remove": "node scripts/api-keys.js remove",
+    "api-key:update-env": "node scripts/api-keys.js update-env",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
