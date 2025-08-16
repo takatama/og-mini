@@ -1,4 +1,6 @@
 const { load } = require("cheerio");
+const iconv = require("iconv-lite");
+const jschardet = require("jschardet");
 
 // Use a realistic User-Agent and headers to avoid being blocked by some sites
 const UA_BROWSERISH =
@@ -90,11 +92,56 @@ async function fetchHtmlWithStreaming(url) {
       }
       if (idleTimer) clearTimeout(idleTimer);
 
-      const html = Buffer.concat(
-        chunks,
-        Math.min(received, MAX_HTML_BYTES)
-      ).toString("utf8");
-      return { type: "ok", resp, html };
+      // Concatenate all chunks into a buffer
+      const buffer = Buffer.concat(chunks, Math.min(received, MAX_HTML_BYTES));
+
+      // Detect encoding from HTML content
+      let encoding = "utf8";
+
+      try {
+        // First, try to find charset in Content-Type header
+        const contentType = resp.headers.get("content-type") || "";
+        const charsetMatch = contentType.match(/charset=([^;,\s]+)/i);
+        if (charsetMatch) {
+          encoding = charsetMatch[1].toLowerCase();
+        } else {
+          // If no charset in header, try to detect from HTML meta tags
+          const htmlStart = buffer.toString(
+            "ascii",
+            0,
+            Math.min(buffer.length, 2048)
+          );
+          const metaCharsetMatch = htmlStart.match(
+            /<meta[^>]*charset\s*=\s*["\']?([^"\'>\s]+)/i
+          );
+          if (metaCharsetMatch) {
+            encoding = metaCharsetMatch[1].toLowerCase();
+          } else {
+            // Last resort: use jschardet to detect encoding
+            const detected = jschardet.detect(buffer);
+            if (detected && detected.encoding && detected.confidence > 0.8) {
+              encoding = detected.encoding.toLowerCase();
+            }
+          }
+        }
+
+        // Convert to UTF-8 if needed
+        let html;
+        if (encoding === "utf8" || encoding === "utf-8") {
+          html = buffer.toString("utf8");
+        } else if (iconv.encodingExists(encoding)) {
+          html = iconv.decode(buffer, encoding);
+        } else {
+          // Fallback to utf-8
+          html = buffer.toString("utf8");
+        }
+
+        return { type: "ok", resp, html };
+      } catch (encodingError) {
+        // If encoding detection/conversion fails, fallback to utf-8
+        const html = buffer.toString("utf8");
+        return { type: "ok", resp, html };
+      }
     } catch (e) {
       clearTimeout(ttfbTimer);
       lastError = e;
