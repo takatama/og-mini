@@ -167,7 +167,34 @@ async function fetchHtmlWithStreaming(url) {
   throw lastError || new Error("fetch failed");
 }
 
+// API Key validation function
+function validateApiKey(req) {
+  const apiKey = req.headers["x-api-key"] || req.query.key;
+  const validApiKeys = process.env.API_KEYS;
+
+  if (!validApiKeys) {
+    // Skip Authentication if API_KEYS is not set
+    return true;
+  }
+
+  if (!apiKey) {
+    return false;
+  }
+
+  const validKeys = validApiKeys.split(",").map((key) => key.trim());
+  return validKeys.includes(apiKey);
+}
+
 exports.og = async (req, res) => {
+  // API Key validation
+  if (!validateApiKey(req)) {
+    return res.status(401).json({
+      error: "unauthorized",
+      message:
+        "Valid API key required in X-API-Key header or 'key' query parameter",
+    });
+  }
+
   const target = (req.query.url || "").toString();
   if (!isHttpUrl(target)) {
     return res.status(400).json({ error: "invalid url" });

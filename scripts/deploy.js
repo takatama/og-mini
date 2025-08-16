@@ -66,6 +66,16 @@ const cmd = [
   `--timeout=${config.TIMEOUT || "8s"}`,
 ];
 
+// Add environment variables
+const envVars = [];
+if (config.API_KEYS) {
+  envVars.push(`API_KEYS=${config.API_KEYS}`);
+}
+
+if (envVars.length > 0) {
+  cmd.push(`--set-env-vars=${envVars.join(",")}`);
+}
+
 // Add service account if specified
 if (config.SERVICE_ACCOUNT) {
   cmd.push(`--service-account=${config.SERVICE_ACCOUNT}`);
